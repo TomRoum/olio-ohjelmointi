@@ -42,4 +42,5 @@ int main(){
     kerta = game(kerta); //ottaa "kerta" muuttujan "game()" funtiolta ja asettaa sen "kerta" muuttujan arvoksi
     cout << "Arvasit " << kerta << " kertaa";
     return 0;
+    //terve
 }
