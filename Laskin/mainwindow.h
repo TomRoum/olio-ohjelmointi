@@ -20,18 +20,18 @@ public:
     ~MainWindow();
 
 private slots:
-    void handleOperator(QPushButton *button, const QString &op);
-    void computeResult();
-    void clearFields();
-    void updateEnterButtonState();
-    void handleBackspace(); // Added backspace functionality
+    void NumberClickHandler();  // Handles number button clicks
+    void lineFocusHandler();    // Handles which QLineEdit is in focus
+    void operatorHandler();     // Ensures only one operator is active
+    void calculate();           // Performs the calculation based on the selected operator
+    void on_pushButton_reset_clicked();
+    void on_pushButton_decimal_clicked();
 
 private:
     Ui::MainWindow *ui;
-    QString selectedOperator;
-    QLineEdit *activeLineEdit;         // Tracks which field is active
-    QPushButton *selectedOperatorButton; // Tracks currently active operator button
-    bool retainOperator;               // Flag to retain operator after calculation
+    QLineEdit *focusedLineEdit; // Stores the currently focused QLineEdit
+    QPushButton *activeOperator; // Stores the currently active operator button
+    int result; // Stores calculation result
 };
 
 #endif // MAINWINDOW_H

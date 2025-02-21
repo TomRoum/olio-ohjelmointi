@@ -1,66 +1,46 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include <QDoubleValidator>
+#include <QDoubleValidator> // Include validator header
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
-    , activeLineEdit(nullptr)
-    , selectedOperatorButton(nullptr)
-    , retainOperator(false)
+    , focusedLineEdit(nullptr)
+    , activeOperator(nullptr)
+    , result(0)
 {
     ui->setupUi(this);
 
-    // Set validators to allow decimal numbers
+    // Make result field read-only
+    ui->lineEdit_result->setReadOnly(true);
+
+    // Set validators to only allow numbers and decimal point
     QDoubleValidator *validator = new QDoubleValidator(this);
     validator->setNotation(QDoubleValidator::StandardNotation);
-    ui->lineEdit_1->setValidator(validator);
-    ui->lineEdit_2->setValidator(validator);
-    ui->lineEdit_3->setReadOnly(true);
+    ui->lineEdit_firtsNum->setValidator(validator);
+    ui->lineEdit_secondNum->setValidator(validator);
 
-    // Set focus to first input field
-    activeLineEdit = ui->lineEdit_1;
-    ui->lineEdit_1->setFocus();
-
-    // Connect digit buttons using lambda slots
+    // Loop to connect number buttons 0-9 to NumberClickHandler
     for (int i = 0; i <= 9; ++i) {
-        QString buttonName = "pushButton_" + QString::number(i);
+        QString buttonName = "pushButton_num" + QString::number(i);
         QPushButton *button = findChild<QPushButton *>(buttonName);
         if (button) {
-            connect(button, &QPushButton::clicked, this, [this, button]() {
-                if (activeLineEdit) {
-                    activeLineEdit->setText(activeLineEdit->text() + button->text());
-                }
-                updateEnterButtonState();
-            });
+            connect(button, &QPushButton::clicked, this, &MainWindow::NumberClickHandler);
         }
     }
 
-    // Connect decimal point button
-    connect(ui->pushButton_decimal, &QPushButton::clicked, this, [this]() {
-        if (activeLineEdit && !activeLineEdit->text().contains(".")) {
-            activeLineEdit->setText(activeLineEdit->text() + ".");
-        }
-    });
+    // Connect QLineEdit fields to lineFocusHandler() using selectionChanged()
+    connect(ui->lineEdit_firtsNum, &QLineEdit::selectionChanged, this, &MainWindow::lineFocusHandler);
+    connect(ui->lineEdit_secondNum, &QLineEdit::selectionChanged, this, &MainWindow::lineFocusHandler);
 
-    // Connect operator buttons
-    connect(ui->pushButton_add, &QPushButton::clicked, this, [this]() { handleOperator(ui->pushButton_add, "+"); });
-    connect(ui->pushButton_subtract, &QPushButton::clicked, this, [this]() { handleOperator(ui->pushButton_subtract, "-"); });
-    connect(ui->pushButton_multiply, &QPushButton::clicked, this, [this]() { handleOperator(ui->pushButton_multiply, "*"); });
-    connect(ui->pushButton_divide, &QPushButton::clicked, this, [this]() { handleOperator(ui->pushButton_divide, "/"); });
+    // Connect operator buttons to operatorHandler
+    connect(ui->pushButton_add, &QPushButton::clicked, this, &MainWindow::operatorHandler);
+    connect(ui->pushButton_subtract, &QPushButton::clicked, this, &MainWindow::operatorHandler);
+    connect(ui->pushButton_multiply, &QPushButton::clicked, this, &MainWindow::operatorHandler); // Multiply
+    connect(ui->pushButton_divide, &QPushButton::clicked, this, &MainWindow::operatorHandler);
 
-    // Connect clear and enter buttons
-    connect(ui->pushButton_clear, &QPushButton::clicked, this, &MainWindow::clearFields);
-    connect(ui->pushButton_enter, &QPushButton::clicked, this, &MainWindow::computeResult);
-
-    // Connect backspace button
-    connect(ui->pushButton_backspace, &QPushButton::clicked, this, &MainWindow::handleBackspace);
-
-    // Connect line edits to track active field
-    connect(ui->lineEdit_1, &QLineEdit::selectionChanged, this, [this]() { activeLineEdit = ui->lineEdit_1; });
-    connect(ui->lineEdit_2, &QLineEdit::selectionChanged, this, [this]() { activeLineEdit = ui->lineEdit_2; });
-
-    ui->pushButton_enter->setEnabled(false); // Disable enter button initially
+    // Connect calculate button to calculation function
+    connect(ui->pushButton_calculate, &QPushButton::clicked, this, &MainWindow::calculate);
 }
 
 MainWindow::~MainWindow()
@@ -68,79 +48,111 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::handleOperator(QPushButton *button, const QString &op)
+// Function to handle number button clicks and input into the focused QLineEdit
+void MainWindow::NumberClickHandler()
 {
-    if (selectedOperatorButton) {
-        selectedOperatorButton->setStyleSheet(""); // Reset previous button style
-    }
+    if (!focusedLineEdit) return; // Ensure a field is selected
 
-    if (selectedOperatorButton == button) {
-        selectedOperator.clear();
-        selectedOperatorButton = nullptr;
-    } else {
-        selectedOperator = op;
-        selectedOperatorButton = button;
-        selectedOperatorButton->setStyleSheet("background-color: #47b1e8; color: white;");
+    QPushButton *button = qobject_cast<QPushButton *>(sender());
+    if (button) {
+        QString buttonText = button->text(); // Get the button's number
+        focusedLineEdit->setText(focusedLineEdit->text() + buttonText);
     }
-
-    retainOperator = true;
-    updateEnterButtonState();
 }
 
-void MainWindow::computeResult()
+// Function to track which QLineEdit is in focus
+void MainWindow::lineFocusHandler()
 {
-    if (selectedOperator.isEmpty()) return;
+    QLineEdit *senderLineEdit = qobject_cast<QLineEdit *>(sender());
+    if (senderLineEdit) {
+        focusedLineEdit = senderLineEdit; // Update the focused QLineEdit
+    }
+}
 
-    float first = ui->lineEdit_1->text().toFloat();
-    float second = ui->lineEdit_2->text().toFloat();
-    float result = 0.0f;
-
-    if (selectedOperator == "+") result = first + second;
-    else if (selectedOperator == "-") result = first - second;
-    else if (selectedOperator == "*") result = first * second;
-    else if (selectedOperator == "/" && second != 0.0f) result = first / second;
-
-    ui->lineEdit_3->setText(QString::number(result, 'g', 10)); // 'g' removes trailing zeros
-
-    if (!retainOperator) {
-        selectedOperator.clear();
-        if (selectedOperatorButton) {
-            selectedOperatorButton->setStyleSheet("");
-            selectedOperatorButton = nullptr;
+// Function to ensure only one operator button is active at a time
+void MainWindow::operatorHandler()
+{
+    QPushButton *button = qobject_cast<QPushButton *>(sender());
+    if (button) {
+        if (activeOperator) {
+            activeOperator->setStyleSheet(""); // Reset previous operator button
         }
+        activeOperator = button;
+        activeOperator->setStyleSheet("background-color: lightblue;"); // Highlight active operator
+    }
+}
+
+// Function to perform the calculation based on the selected operator
+void MainWindow::calculate()
+{
+    if (!activeOperator) {
+        ui->lineEdit_result->setText("Error: No operator selected");
+        return;
     }
 
-    retainOperator = false;
-    ui->pushButton_enter->setEnabled(false);
-}
+    bool ok1, ok2;
+    double num1 = ui->lineEdit_firtsNum->text().toDouble(&ok1);
+    double num2 = ui->lineEdit_secondNum->text().toDouble(&ok2);
 
-void MainWindow::clearFields()
-{
-    ui->lineEdit_1->clear();
-    ui->lineEdit_2->clear();
-    ui->lineEdit_3->clear();
-    selectedOperator.clear();
-    retainOperator = false;
-    if (selectedOperatorButton) {
-        selectedOperatorButton->setStyleSheet("");
-        selectedOperatorButton = nullptr;
+    if (!ok1 || !ok2) {
+        ui->lineEdit_result->setText("Error: Invalid input");
+        return;
     }
-    ui->pushButton_enter->setEnabled(false);
+
+    double resultValue = 0;
+
+    if (activeOperator == ui->pushButton_add) {
+        resultValue = num1 + num2;
+    } else if (activeOperator == ui->pushButton_subtract) {
+        resultValue = num1 - num2;
+    } else if (activeOperator == ui->pushButton_multiply) {
+        resultValue = num1 * num2;
+    } else if (activeOperator == ui->pushButton_divide) {
+        if (num2 == 0) {
+            ui->lineEdit_result->setText("Error: Divide by zero");
+            return;
+        }
+        resultValue = num1 / num2;
+    }
+
+    ui->lineEdit_result->setText(QString::number(resultValue));
 }
 
-void MainWindow::updateEnterButtonState()
+// Function to reset all values and clear fields
+void MainWindow::on_pushButton_reset_clicked()
 {
-    bool canPress = !ui->lineEdit_1->text().isEmpty() &&
-                    !ui->lineEdit_2->text().isEmpty() &&
-                    !selectedOperator.isEmpty();
-    ui->pushButton_enter->setEnabled(canPress);
+    // Clear all QLineEdit fields
+    ui->lineEdit_firtsNum->clear();
+    ui->lineEdit_secondNum->clear();
+    ui->lineEdit_result->clear();
+
+    // Reset stored variables
+    focusedLineEdit = nullptr;
+    activeOperator = nullptr;
+    result = 0;
+
+    // Reset operator button highlight to default
+    QList<QPushButton*> operatorButtons = {
+        ui->pushButton_add,
+        ui->pushButton_subtract,
+        ui->pushButton_multiply,
+        ui->pushButton_divide
+    };
+
+    for (QPushButton* button : operatorButtons) {
+        button->setStyleSheet(""); // Reset to default style
+    }
 }
 
-void MainWindow::handleBackspace()
+// Function to handle decimal point input
+void MainWindow::on_pushButton_decimal_clicked()
 {
-    if (activeLineEdit && !activeLineEdit->text().isEmpty()) {
-        QString text = activeLineEdit->text();
-        text.chop(1); // Remove last character
-        activeLineEdit->setText(text);
+    if (!focusedLineEdit) return; // Ensure a field is selected
+
+    QString currentText = focusedLineEdit->text();
+
+    // Prevent multiple decimal points in the same number
+    if (!currentText.contains('.')) {
+        focusedLineEdit->setText(currentText + ".");
     }
 }
