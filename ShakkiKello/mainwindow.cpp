@@ -2,38 +2,48 @@
 #include "ui_mainwindow.h"
 #include <QRandomGenerator>
 
+// Constructor: Initializes the main window and game settings
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
+    , currentMode(RAPID)
     , leftTime(300)
     , rightTime(300)
     , isLeftTurn(true)
     , gameStarted(false)
-    , currentMode(RAPID)
     , incrementLevel(0)
     , delayLevel(0)
     , prevLeftTime(300)
     , prevRightTime(300)
 {
     ui->setupUi(this);
+
+    // Timers for left and right players
     leftPlayerTimer = new QTimer(this);
     rightPlayerTimer = new QTimer(this);
 
+    // Connect timers to their respective timeout handlers
     connect(leftPlayerTimer, &QTimer::timeout, this, &MainWindow::handleLeftPlayerTimer);
     connect(rightPlayerTimer, &QTimer::timeout, this, &MainWindow::handleRightPlayerTimer);
+
+    // Connect start button to start function
     connect(ui->pushButton_start, &QPushButton::clicked, this, &MainWindow::on_pushButton_start_clicked);
 
+    // Set initial UI state
     ui->label_announcer->setText("Choose game mode and other options, then press Start.");
-
     ui->pushButton_LeftPlayerButton->setEnabled(false);
     ui->pushButton_LeftPlayerButton->setStyleSheet("");
     ui->pushButton_RightPlayerButton->setEnabled(false);
     ui->pushButton_RightPlayerButton->setStyleSheet("");
 
+    // Update timers and progress bars
     updateUI();
+
+    // Ensure announcer label reflects initial values
     updateAnnouncer();
 }
 
+// Function to start the game when the start button is clicked
 void MainWindow::on_pushButton_start_clicked()
 {
     gameStarted = true;
@@ -42,6 +52,7 @@ void MainWindow::on_pushButton_start_clicked()
     updateAnnouncer();
     updateUI();
 
+    // Apply delay before the first turn starts
     QTimer::singleShot(delayLevel * 1000, this, [=]() {
         if (isLeftTurn) {
             leftPlayerTimer->start(1000);
@@ -51,17 +62,16 @@ void MainWindow::on_pushButton_start_clicked()
     });
 }
 
+// Toggles between RAPID and BLITZ modes
 void MainWindow::on_pushButton_mode_clicked()
 {
-    if (gameStarted) return; // Mode can only be changed before the game starts
+    if (gameStarted) return;    // Mode can only be changed before the game starts
 
     currentMode = (currentMode == RAPID) ? BLITZ : RAPID;
 
-    if (currentMode == RAPID) {
-        leftTime = rightTime = 300;
-    } else {
-        leftTime = rightTime = 30;
-    }
+    // Set initial times based on mode
+    leftTime = (currentMode == RAPID) ? 300 : 30;
+    rightTime = (currentMode == RAPID) ? 300 : 30;
 
     prevLeftTime = leftTime;
     prevRightTime = rightTime;
@@ -70,6 +80,7 @@ void MainWindow::on_pushButton_mode_clicked()
     updateAnnouncer();
 }
 
+// Cycle through predefined increment options
 void MainWindow::on_pushButton_increment_clicked()
 {
     if (gameStarted) return;
@@ -81,6 +92,7 @@ void MainWindow::on_pushButton_increment_clicked()
     updateAnnouncer();
 }
 
+// Cycle through predefined delay options
 void MainWindow::on_pushButton_delay_clicked()
 {
     if (gameStarted) return;
@@ -92,34 +104,37 @@ void MainWindow::on_pushButton_delay_clicked()
     updateAnnouncer();
 }
 
+// Handles left player pressing their button
 void MainWindow::on_pushButton_LeftPlayerButton_clicked()
 {
     if (!gameStarted) return;
 
-    leftTime = qMin(prevLeftTime, leftTime + incrementLevel);
+    leftTime = qMin(prevLeftTime, leftTime + incrementLevel);   // Apply increment
     prevLeftTime = leftTime;
 
     leftPlayerTimer->stop();
     rightPlayerTimer->stop();
 
     updateUI();
-    QTimer::singleShot(delayLevel * 1000, this, &MainWindow::switchTurn);
+    switchTurn(); // Directly switch turns
 }
 
+// Handles right player pressing their button
 void MainWindow::on_pushButton_RightPlayerButton_clicked()
 {
     if (!gameStarted) return;
 
-    rightTime = qMin(prevRightTime, rightTime + incrementLevel);
+    rightTime = qMin(prevRightTime, rightTime + incrementLevel);    // Apply increment
     prevRightTime = rightTime;
 
     rightPlayerTimer->stop();
     leftPlayerTimer->stop();
 
     updateUI();
-    QTimer::singleShot(delayLevel * 1000, this, &MainWindow::switchTurn);
+    switchTurn(); // Directly switch turns
 }
 
+// Handles left player timer
 void MainWindow::handleLeftPlayerTimer()
 {
     if (isLeftTurn && gameStarted) {
@@ -134,6 +149,7 @@ void MainWindow::handleLeftPlayerTimer()
     }
 }
 
+// Handles right player timer
 void MainWindow::handleRightPlayerTimer()
 {
     if (!isLeftTurn && gameStarted) {
@@ -148,6 +164,7 @@ void MainWindow::handleRightPlayerTimer()
     }
 }
 
+// Switch turns between players
 void MainWindow::switchTurn()
 {
     isLeftTurn = !isLeftTurn;
@@ -166,6 +183,7 @@ void MainWindow::switchTurn()
     });
 }
 
+// Highlights the active player
 void MainWindow::highlightCurrentPlayer()
 {
     if (!gameStarted) {
@@ -189,6 +207,7 @@ void MainWindow::highlightCurrentPlayer()
     }
 }
 
+// Updates the counters and progressbars with player times
 void MainWindow::updateUI()
 {
     ui->lcdNumber_CountLeft->display(leftTime);
@@ -202,27 +221,28 @@ void MainWindow::updateUI()
     ui->progressBar_right->setValue(rightTime);
 }
 
+// Updates the announcer label with game status
 void MainWindow::updateAnnouncer()
 {
     if (!gameStarted) {
-        ui->label_announcer->setText("Game not started. Choose mode and options, then press Start.");
+        ui->label_announcer->setText(QString(
+        "Game not started. Choose mode and options, then press Start.\n" "Increment: %1s | Delay: %2s")
+        .arg(incrementLevel)
+        .arg(delayLevel)
+        );
         return;
     }
 
-    QString turnText = isLeftTurn ? "Left's turn" : "Right's turn";
-    QString modeText = (currentMode == RAPID) ? "RAPID" : "BLITZ";
-    QString incrementText = QString::number(incrementLevel);
-    QString delayText = QString::number(delayLevel);
-
-    QString statusMessage = QString("Game started. %1 | Mode: %2 | Increment: %3s | Delay: %4s")
-                                .arg(turnText)
-                                .arg(modeText)
-                                .arg(incrementText)
-                                .arg(delayText);
-
-    ui->label_announcer->setText(statusMessage);
+    ui->label_announcer->setText(QString("Game started. %1 | Mode: %2 | Increment: %3s | Delay: %4s")
+    .arg(isLeftTurn ? "Left's turn" : "Right's turn",
+    (currentMode == RAPID) ? "RAPID" : "BLITZ",
+    QString::number(incrementLevel),
+    QString::number(delayLevel)
+    )
+    );
 }
 
+// Checks if the game has ended
 void MainWindow::checkGameEnd()
 {
     if (leftTime <= 0 || rightTime <= 0) {
